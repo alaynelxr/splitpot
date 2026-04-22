@@ -51,10 +51,13 @@ export function ItemRow({
     .filter(Boolean) as Participant[];
 
   const onPointerDown = useCallback((e: React.PointerEvent) => {
+    // Capture so we receive pointermove/pointerup even if the browser scrolls
+    e.currentTarget.setPointerCapture(e.pointerId);
     startX.current = e.clientX;
     pressedRef.current = true;
     longPressTimer.current = setTimeout(() => {
       if (pressedRef.current) {
+        pressedRef.current = false; // consumed by long press
         onToggleSelect(item.id, true);
         navigator.vibrate?.(30);
       }
@@ -64,17 +67,20 @@ export function ItemRow({
   const onPointerMove = useCallback((e: React.PointerEvent) => {
     if (startX.current === null) return;
     const dx = e.clientX - startX.current;
-    if (Math.abs(dx) > 8) {
-      if (longPressTimer.current) clearTimeout(longPressTimer.current);
-      pressedRef.current = false;
+    // Cancel long-press on horizontal movement, but don't touch pressedRef —
+    // that flag is now only for tracking whether the long-press timer fired.
+    if (Math.abs(dx) > 8 && longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
     }
     if (dx < 0) setSwipeX(Math.max(dx, -90));
     else setSwipeX(0);
   }, []);
 
   const onPointerUp = useCallback((e: React.PointerEvent) => {
-    if (longPressTimer.current) clearTimeout(longPressTimer.current);
-    const wasLong = !pressedRef.current;
+    if (longPressTimer.current) { clearTimeout(longPressTimer.current); longPressTimer.current = null; }
+    // pressedRef is false only if the long-press timer already fired and consumed the press
+    const didLongPress = !pressedRef.current;
     pressedRef.current = false;
     if (swipeX < -60) {
       onDelete(item.id);
@@ -83,9 +89,10 @@ export function ItemRow({
       return;
     }
     setSwipeX(0);
-    if (!wasLong && startX.current !== null) {
+    if (!didLongPress && startX.current !== null) {
       const dx = e.clientX - startX.current;
-      if (Math.abs(dx) < 5 && !editingName && !editingPrice) {
+      // Use 10px threshold — Android taps can have a few pixels of drift
+      if (Math.abs(dx) < 10 && !editingName && !editingPrice) {
         if (multiSelectMode) onToggleSelect(item.id);
         else if (item.unclear) onOpenFix(item.id);
         else onOpenSheet(item.id);
@@ -103,7 +110,7 @@ export function ItemRow({
       <div className="delete-bg">DELETE</div>
       <div
         className={`item ${selected ? "selected" : ""} ${isSolo ? "individual" : ""} ${item.unclear ? "unclear" : ""}`}
-        style={{ transform: `translateX(${swipeX}px)` }}
+        style={{ transform: `translateX(${swipeX}px)`, touchAction: "pan-y" }}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
