@@ -106,6 +106,7 @@ export function calculateSplits(
       participantId: p.id,
       name: p.name,
       color: p.color,
+      hue: p.hue,
       itemSubtotalCents: itemSub,
       serviceChargeCents: serviceShare,
       gstCents: gstShare,

@@ -1,25 +1,18 @@
 import type { Metadata, Viewport } from "next";
-import { Press_Start_2P, Space_Mono, Inter } from "next/font/google";
-import { ToastProvider } from "@/components/ui/Toast";
+import { Press_Start_2P, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 
 const pressStart2P = Press_Start_2P({
   weight: "400",
   subsets: ["latin"],
-  variable: "--font-display",
+  variable: "--font-pixel",
   display: "swap",
 });
 
-const spaceMono = Space_Mono({
-  weight: ["400", "700"],
+const jetbrainsMono = JetBrains_Mono({
+  weight: ["400", "500", "600", "700"],
   subsets: ["latin"],
-  variable: "--font-heading",
-  display: "swap",
-});
-
-const inter = Inter({
-  subsets: ["latin"],
-  variable: "--font-body",
+  variable: "--font-mono",
   display: "swap",
 });
 
@@ -34,21 +27,16 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,
-  themeColor: "#1A1A2E",
+  themeColor: "#0a0420",
 };
 
 export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html
-      lang="en"
-      className={`${pressStart2P.variable} ${spaceMono.variable} ${inter.variable} h-full`}
-    >
-      <body className="min-h-full bg-bg text-text font-body">
-        <ToastProvider>
-          <div id="app-shell">{children}</div>
-        </ToastProvider>
+    <html lang="en" className={`${pressStart2P.variable} ${jetbrainsMono.variable}`}>
+      <body>
+        <div id="app-shell">{children}</div>
       </body>
     </html>
   );

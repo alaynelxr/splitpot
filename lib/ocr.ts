@@ -70,29 +70,108 @@ function extractPercent(s: string): number | null {
  * @param onProgress Called with progress updates 0–1
  * @param signal     AbortSignal for cancellation
  */
+/**
+ * Phases Tesseract goes through, in order.
+ * We map them to a global 0–1 progress by weighting each phase.
+ */
+const PHASE_WEIGHTS: Record<string, { start: number; span: number }> = {
+  "loading tesseract core":       { start: 0.00, span: 0.20 },
+  "loading language traineddata": { start: 0.20, span: 0.30 },
+  "initializing tesseract":       { start: 0.50, span: 0.10 },
+  "initializing api":             { start: 0.60, span: 0.10 },
+  "recognizing text":             { start: 0.70, span: 0.30 },
+};
+
+function toGlobalProgress(status: string, phaseProgress: number): number {
+  const phase = PHASE_WEIGHTS[status];
+  if (!phase) return 0;
+  return phase.start + phase.span * phaseProgress;
+}
+
 export async function runOcr(
   imageFile: File,
   onProgress: (p: OcrProgress) => void,
   signal?: AbortSignal
 ): Promise<OcrResult> {
-  const worker = await createWorker("eng", 1, {
-    logger: (m: { status: string; progress: number }) => {
-      if (signal?.aborted) return;
-      onProgress({ status: m.status, progress: m.progress ?? 0 });
-    },
-  });
+  console.log("[OCR] runOcr called, file:", imageFile.name, imageFile.size, "bytes");
+
+  const WORKER_TIMEOUT_MS = 45_000;
+
+  console.log("[OCR] Creating Tesseract worker (workerPath=/tesseract-worker.min.js)");
+
+  let worker;
+  try {
+    worker = await Promise.race([
+      createWorker("eng", 1, {
+        workerPath: "/tesseract-worker.min.js",
+        workerBlobURL: false,
+        // Serve WASM core and language data from local public/ — no CDN needed.
+        corePath: "/tesseract-core",
+        langPath: "/lang-data",
+        logger: (m: { status: string; progress: number }) => {
+          console.log(`[OCR] logger: status="${m.status}" progress=${m.progress?.toFixed(3)}`);
+          if (signal?.aborted) return;
+          const global = toGlobalProgress(m.status, m.progress ?? 0);
+          onProgress({ status: m.status, progress: global });
+        },
+      }),
+      new Promise<never>((_, reject) =>
+        setTimeout(
+          () => reject(new Error(`[OCR] createWorker timed out after ${WORKER_TIMEOUT_MS}ms`)),
+          WORKER_TIMEOUT_MS
+        )
+      ),
+    ]);
+    console.log("[OCR] Worker created successfully");
+  } catch (err) {
+    console.error("[OCR] Worker creation FAILED:", err);
+    throw err;
+  }
 
   try {
     if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
 
+    console.log("[OCR] Calling worker.recognize...");
     const { data } = await worker.recognize(imageFile);
+    console.log("[OCR] recognize() completed, raw text length:", data.text.length);
 
     if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
 
     return parseReceiptText(data.text);
   } finally {
+    console.log("[OCR] Terminating worker");
     await worker.terminate();
   }
+}
+
+function matchPrice(line: string): { matchStr: string; cents: number } | null {
+  // 1. Explicit decimal: $12.99 / 12.99 / 12,99
+  const dec = line.match(/\$?\s*(\d{1,4}[.,]\d{2})\s*$/);
+  if (dec) {
+    const cents = parseDollarString(dec[1].replace(",", "."));
+    if (cents !== null && cents > 0) return { matchStr: dec[0], cents };
+  }
+
+  // 2. 3–4 digit integer → treat as implicit 2-decimal price (OCR dropped the period)
+  //    e.g. "2099" → $20.99,  "770" → $7.70
+  const longInt = line.match(/\b(\d{3,4})\s*$/);
+  if (longInt) {
+    const cents = parseInt(longInt[1], 10);
+    if (cents > 0) return { matchStr: longInt[0], cents };
+  }
+
+  // 3. 1–2 digit integer → whole dollar amount, but only when a preceding number
+  //    exists on the line (indicating a quantity, e.g. "Prawn Paste 1 10")
+  const shortInt = line.match(/\b(\d{1,2})\s*$/);
+  if (shortInt) {
+    const before = line.slice(0, line.lastIndexOf(shortInt[0]));
+    if (/\d/.test(before)) {
+      const cents = parseInt(shortInt[1], 10) * 100;
+      if (cents > 0) return { matchStr: shortInt[0], cents };
+    }
+  }
+
+  return null;
 }
 
 /**
@@ -104,6 +183,9 @@ export function parseReceiptText(rawText: string): OcrResult {
     .split("\n")
     .map((l) => l.trim())
     .filter(Boolean);
+
+  console.log("[OCR] parseReceiptText: total non-empty lines:", lines.length);
+  console.log("[OCR] Full raw text:\n" + rawText);
 
   let restaurantName: string | null = null;
   let serviceChargePct: number | null = null;
@@ -125,26 +207,40 @@ export function parseReceiptText(rawText: string): OcrResult {
 
   // Parse line items
   for (const line of lines) {
-    // Try to find a price at the end of the line
-    // Patterns: $12.50  12.50  12,50
-    const priceMatch = line.match(/\$?\s*(\d{1,4}[.,]\d{2})\s*$/);
-    if (!priceMatch) continue;
+    // Match price at end of line. Try patterns in order of reliability:
+    //   1. Explicit decimal:    "12.99" or "12,99"
+    //   2. 3-4 digit integer:   "2099" → $20.99, "770" → $7.70 (period dropped by OCR)
+    //   3. 1-2 digit integer:   "10" → $10.00, "3" → $3.00 (only when a qty number precedes it)
+    const priceResult = matchPrice(line);
+    if (!priceResult) {
+      console.log(`[OCR] SKIP (no price match): "${line}"`);
+      continue;
+    }
 
-    const priceStr = priceMatch[1].replace(",", ".");
-    const priceCents = parseDollarString(priceStr);
-    if (priceCents === null || priceCents <= 0) continue;
+    const { matchStr, cents: priceCents } = priceResult;
+    if (priceCents <= 0) {
+      console.log(`[OCR] SKIP (zero price): "${line}"`);
+      continue;
+    }
 
     // Extract item name: everything before the price
-    const namePart = line.slice(0, line.lastIndexOf(priceMatch[0])).trim();
+    const namePart = line.slice(0, line.lastIndexOf(matchStr)).trim();
     const cleanName = namePart.replace(/[^\w\s'&\-()]/g, " ").replace(/\s+/g, " ").trim();
-    if (!cleanName) continue;
+    if (!cleanName) {
+      console.log(`[OCR] SKIP (empty name after clean): "${line}"`);
+      continue;
+    }
 
     // Skip summary rows
-    if (SKIP_KEYWORDS.some((re) => re.test(cleanName))) continue;
+    if (SKIP_KEYWORDS.some((re) => re.test(cleanName))) {
+      console.log(`[OCR] SKIP (keyword match): "${line}"`);
+      continue;
+    }
 
     // Detect service charge
     if (SERVICE_KEYWORDS.some((re) => re.test(cleanName))) {
       const pct = extractPercent(line) ?? (priceCents / 100);
+      console.log(`[OCR] SERVICE CHARGE: "${line}" → ${pct}%`);
       if (pct !== null && pct > 0 && pct <= 30) {
         serviceChargePct = pct;
       }
@@ -154,12 +250,14 @@ export function parseReceiptText(rawText: string): OcrResult {
     // Detect GST
     if (GST_KEYWORDS.some((re) => re.test(cleanName))) {
       const pct = extractPercent(line);
+      console.log(`[OCR] GST: "${line}" → ${pct}%`);
       if (pct !== null && pct > 0 && pct <= 20) {
         gstPct = pct;
       }
       continue;
     }
 
+    console.log(`[OCR] LINE ITEM: name="${cleanName}" price=${priceCents}¢ (from "${line}")`);
     lineItems.push({
       id: genId(),
       name: cleanName || "Item",
@@ -168,6 +266,7 @@ export function parseReceiptText(rawText: string): OcrResult {
     });
   }
 
+  console.log(`[OCR] Parse result: ${lineItems.length} items, restaurant="${restaurantName}", svc=${serviceChargePct}%, gst=${gstPct}%`);
   return {
     restaurantName,
     lineItems,

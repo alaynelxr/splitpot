@@ -4,7 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSplitStore } from "@/store/splitStore";
 import { runOcr } from "@/lib/ocr";
-import { ProgressBar } from "@/components/ui/ProgressBar";
+import { TopBar } from "@/components/TopBar";
+import { Crab } from "@/components/PixelArt";
 
 export default function ProcessingPage() {
   const router = useRouter();
@@ -19,12 +20,7 @@ export default function ProcessingPage() {
   const startedRef = useRef(false);
 
   useEffect(() => {
-    // Guard: if no image, send back to landing
-    if (!rawImage) {
-      router.replace("/");
-      return;
-    }
-    // Prevent double-run in React StrictMode dev
+    if (!rawImage) { router.replace("/"); return; }
     if (startedRef.current) return;
     startedRef.current = true;
 
@@ -32,88 +28,75 @@ export default function ProcessingPage() {
     abortRef.current = controller;
 
     async function run() {
+      console.log("[Processing] run() started");
       try {
-        // Convert data URL back to a File for Tesseract
+        console.log("[Processing] Fetching rawImage data URL, length:", rawImage!.length);
         const res = await fetch(rawImage!);
         const blob = await res.blob();
         const file = new File([blob], "receipt.jpg", { type: blob.type });
+        console.log("[Processing] File created:", file.name, file.size, "bytes", file.type);
 
         const result = await runOcr(
           file,
           (p) => {
             setProgress(p.progress);
-            setStatusLabel(
-              p.status === "recognizing text"
-                ? "READING BILL..."
-                : p.status.toUpperCase().replace(/_/g, " ")
-            );
+            const labels: Record<string, string> = {
+              "loading tesseract core":       "LOADING OCR ENGINE...",
+              "loading language traineddata": "LOADING LANGUAGE DATA...",
+              "initializing tesseract":       "INITIALIZING...",
+              "initializing api":             "INITIALIZING...",
+              "recognizing text":             "READING BILL...",
+            };
+            const label = labels[p.status] ?? "PROCESSING...";
+            console.log(`[Processing] progress callback: "${p.status}" → "${label}" (${(p.progress * 100).toFixed(1)}%)`);
+            setStatusLabel(label);
           },
           controller.signal
         );
 
+        console.log("[Processing] OCR complete, lineItems:", result.lineItems.length, "restaurantName:", result.restaurantName);
         if (controller.signal.aborted) return;
-
         if (result.lineItems.length === 0) {
+          console.warn("[Processing] No line items found, going to ocr-error");
           router.replace("/ocr-error");
           return;
         }
 
-        // Commit results to store
         setLineItems(result.lineItems);
         setRestaurantName(result.restaurantName);
-        setExtras({
-          serviceChargePct: result.serviceChargePct ?? 0,
-          gstPct: result.gstPct ?? 0,
-        });
-
+        setExtras({ serviceChargePct: result.serviceChargePct ?? 0, gstPct: result.gstPct ?? 0 });
         router.replace("/group");
       } catch (err) {
+        console.error("[Processing] run() caught error:", err);
         if ((err as DOMException)?.name === "AbortError") return;
-        console.error("OCR failed:", err);
-        router.replace("/ocr-error");
+        setStatusLabel("OCR FAILED — CHECK CONSOLE");
+        setTimeout(() => router.replace("/ocr-error"), 1500);
       }
     }
 
     run();
-
-    return () => {
-      controller.abort();
-    };
+    return () => { controller.abort(); startedRef.current = false; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const handleCancel = () => {
-    abortRef.current?.abort();
-    router.replace("/");
-  };
-
   return (
-    <main className="flex flex-col items-center justify-center min-h-screen px-6 bg-bg gap-10">
-      {/* Crab mascot placeholder */}
-      <div className="text-center" aria-hidden>
-        <div className="text-7xl mb-2" style={{ imageRendering: "pixelated" }}>
-          🦀
+    <div className="app scanlines">
+      <TopBar step={1} />
+      <div className="processing">
+        <div className="processing-crab">
+          <Crab px={5} />
         </div>
-        <p className="font-heading text-xs text-muted tracking-widest">
-          NOM NOM RECEIPT...
-        </p>
+        <div className="processing-label" style={statusLabel.includes("FAILED") ? { color: "var(--pink)" } : undefined}>{statusLabel}</div>
+        <div style={{ width: "100%", maxWidth: 260 }}>
+          <div className="processing-bar">
+            <div className="processing-bar-fill" style={{ width: `${Math.round(progress * 100)}%` }} />
+          </div>
+        </div>
+        <div className="processing-sub">NOM NOM RECEIPT...</div>
+        <div className="processing-cancel" onClick={() => { abortRef.current?.abort(); router.replace("/"); }}>
+          CANCEL
+        </div>
       </div>
-
-      {/* Status + progress */}
-      <div className="w-full max-w-[280px] flex flex-col items-center gap-4">
-        <p className="font-heading text-sm text-orange tracking-wider text-center">
-          {statusLabel}
-        </p>
-        <ProgressBar progress={progress} className="w-full" />
-      </div>
-
-      {/* Cancel */}
-      <button
-        onClick={handleCancel}
-        className="font-heading text-xs text-muted hover:text-pink transition-colors mt-4"
-      >
-        CANCEL
-      </button>
-    </main>
+    </div>
   );
 }

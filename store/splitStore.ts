@@ -1,42 +1,25 @@
 "use client";
 
 import { create } from "zustand";
-import type {
-  Participant,
-  LineItem,
-  BillExtras,
-  PersonSplit,
-  SplitSession,
-} from "@/types";
-import { PLAYER_COLORS } from "@/types";
+import type { Participant, LineItem, BillExtras, PersonSplit, SplitSession } from "@/types";
+import { HUES, HUE_COLORS } from "@/types";
 import { calculateSplits } from "@/lib/calculations";
 
 interface SplitStore extends SplitSession {
-  // Setters
   setRestaurantName: (name: string | null) => void;
   setRawImage: (dataUrl: string | null) => void;
-
-  // Participants
-  addParticipant: (name: string) => void;
+  addParticipant: (name: string, isMe?: boolean) => void;
   removeParticipant: (id: string) => void;
+  updateParticipant: (id: string, name: string) => void;
   reorderParticipants: (ids: string[]) => void;
-
-  // Line items
+  setParticipants: (participants: Participant[]) => void;
   setLineItems: (items: LineItem[]) => void;
   addLineItem: (item: Omit<LineItem, "id">) => void;
   updateLineItem: (id: string, patch: Partial<Omit<LineItem, "id">>) => void;
   removeLineItem: (id: string) => void;
-
-  // Assignment
   assignItem: (itemId: string, participantIds: string[]) => void;
-
-  // Extras
   setExtras: (extras: Partial<BillExtras>) => void;
-
-  // Compute
   computeSplits: () => void;
-
-  // Reset
   reset: () => void;
 }
 
@@ -69,18 +52,19 @@ export const useSplitStore = create<SplitStore>((set, get) => ({
   setRestaurantName: (name) => set({ restaurantName: name }),
   setRawImage: (dataUrl) => set({ rawImage: dataUrl }),
 
-  addParticipant: (name) => {
+  addParticipant: (name, isMe = false) => {
     const { participants } = get();
-    if (participants.length >= 10) return;
-    const color = PLAYER_COLORS[participants.length % PLAYER_COLORS.length];
-    const p: Participant = { id: genId(), name: name.trim(), color };
+    if (participants.length >= 15) return;
+    const idx = participants.length;
+    const hue = HUES[idx % HUES.length];
+    const color = HUE_COLORS[hue];
+    const p: Participant = { id: genId(), name: name.trim(), color, hue, me: isMe };
     set({ participants: [...participants, p] });
   },
 
   removeParticipant: (id) => {
     const { participants, lineItems } = get();
     const updated = participants.filter((p) => p.id !== id);
-    // Remove this participant from all item assignments
     const updatedItems = lineItems.map((item) => ({
       ...item,
       assignedTo: item.assignedTo.filter((pid) => pid !== id),
@@ -88,12 +72,18 @@ export const useSplitStore = create<SplitStore>((set, get) => ({
     set({ participants: updated, lineItems: updatedItems });
   },
 
+  updateParticipant: (id, name) => {
+    const { participants } = get();
+    set({ participants: participants.map((p) => p.id === id ? { ...p, name } : p) });
+  },
+
   reorderParticipants: (ids) => {
     const { participants } = get();
     const map = new Map(participants.map((p) => [p.id, p]));
-    const reordered = ids.map((id) => map.get(id)!).filter(Boolean);
-    set({ participants: reordered });
+    set({ participants: ids.map((id) => map.get(id)!).filter(Boolean) });
   },
+
+  setParticipants: (participants) => set({ participants }),
 
   setLineItems: (items) => set({ lineItems: items }),
 
@@ -104,11 +94,7 @@ export const useSplitStore = create<SplitStore>((set, get) => ({
 
   updateLineItem: (id, patch) => {
     const { lineItems } = get();
-    set({
-      lineItems: lineItems.map((item) =>
-        item.id === id ? { ...item, ...patch } : item
-      ),
-    });
+    set({ lineItems: lineItems.map((item) => item.id === id ? { ...item, ...patch } : item) });
   },
 
   removeLineItem: (id) => {
@@ -118,16 +104,13 @@ export const useSplitStore = create<SplitStore>((set, get) => ({
 
   assignItem: (itemId, participantIds) => {
     const { lineItems, participants } = get();
-    // Empty array = all participants (default shared)
     const allIds = participants.map((p) => p.id);
     const isAll =
       participantIds.length === allIds.length &&
       allIds.every((id) => participantIds.includes(id));
     set({
       lineItems: lineItems.map((item) =>
-        item.id === itemId
-          ? { ...item, assignedTo: isAll ? [] : participantIds }
-          : item
+        item.id === itemId ? { ...item, assignedTo: isAll ? [] : participantIds } : item
       ),
     });
   },

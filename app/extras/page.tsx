@@ -3,20 +3,21 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSplitStore } from "@/store/splitStore";
-import { StepHeader } from "@/components/ui/StepHeader";
-import { Button } from "@/components/ui/Button";
-import { formatCents, itemsTotal } from "@/lib/calculations";
+import { TopBar } from "@/components/TopBar";
+import { itemsTotal } from "@/lib/calculations";
 import type { DiscountType, DiscountTiming } from "@/types";
 
 export default function ExtrasPage() {
   const router = useRouter();
   const extras = useSplitStore((s) => s.extras);
   const lineItems = useSplitStore((s) => s.lineItems);
+  const participants = useSplitStore((s) => s.participants);
+  const restaurantName = useSplitStore((s) => s.restaurantName);
   const setExtras = useSplitStore((s) => s.setExtras);
   const computeSplits = useSplitStore((s) => s.computeSplits);
 
-  const [svcPct, setSvcPct] = useState(String(extras.serviceChargePct || ""));
-  const [gstPct, setGstPct] = useState(String(extras.gstPct || ""));
+  const [svcPct, setSvcPct] = useState("10");
+  const [gstPct, setGstPct] = useState("9");
   const [discountVal, setDiscountVal] = useState(String(extras.discountValue || ""));
   const [discountType, setDiscountType] = useState<DiscountType>(extras.discountType);
   const [discountTiming, setDiscountTiming] = useState<DiscountTiming>(extras.discountTiming);
@@ -26,23 +27,24 @@ export default function ExtrasPage() {
   const gstNum = parseFloat(gstPct) || 0;
   const discNum = parseFloat(discountVal) || 0;
 
-  // Running preview calculation (cents)
   const discBefore = discountTiming === "before_tax"
     ? (discountType === "flat" ? Math.round(discNum * 100) : Math.round(subtotal * discNum / 100))
     : 0;
-  const taxBase = subtotal - discBefore;
-  const svcCents = Math.round(taxBase * svcNum / 100);
-  const gstCents = Math.round((taxBase + svcCents) * gstNum / 100);
+  const taxable = subtotal - discBefore;
+  const svcCents = Math.round(taxable * svcNum / 100);
+  const gstCents = Math.round((taxable + svcCents) * gstNum / 100);
   const discAfter = discountTiming === "after_tax"
     ? (discountType === "flat" ? Math.round(discNum * 100) : Math.round((subtotal + svcCents + gstCents) * discNum / 100))
     : 0;
   const preview = subtotal + svcCents + gstCents - discBefore - discAfter;
 
+  const fmt = (c: number) => `S$${(Math.abs(c) / 100).toFixed(2)}`;
+
   const handleCalculate = () => {
     setExtras({
-      serviceChargePct: parseFloat(svcPct) || 0,
-      gstPct: parseFloat(gstPct) || 0,
-      discountValue: parseFloat(discountVal) || 0,
+      serviceChargePct: svcNum,
+      gstPct: gstNum,
+      discountValue: discNum,
       discountType,
       discountTiming,
     });
@@ -51,185 +53,136 @@ export default function ExtrasPage() {
   };
 
   return (
-    <main className="flex flex-col min-h-screen bg-bg">
-      <StepHeader title="BILL EXTRAS" step={3} totalSteps={4} showBack backHref="/items" />
+    <div className="app scanlines" style={{ position: "relative" }}>
+      <TopBar step={5} onBack={() => router.push("/items")} billName={restaurantName} />
 
-      <div className="flex-1 px-4 py-6 flex flex-col gap-6 overflow-y-auto">
-        {/* Service charge */}
-        <FieldRow
-          label="SERVICE CHARGE"
-          sublabel="usually 10%"
-          value={svcPct}
-          onChange={setSvcPct}
-          suffix="%"
-          placeholder="0"
-        />
-
-        {/* GST */}
-        <FieldRow
-          label="GST"
-          sublabel="currently 9% in SG"
-          value={gstPct}
-          onChange={setGstPct}
-          suffix="%"
-          placeholder="0"
-        />
-
-        {/* Divider */}
-        <div className="border-t border-dashed border-border" />
-
-        {/* Discount */}
-        <div className="flex flex-col gap-3">
-          <div className="flex items-baseline justify-between">
-            <span className="font-heading text-xs text-muted">DISCOUNT</span>
-            {/* Type toggle */}
-            <div className="flex">
-              {(["flat", "percent"] as DiscountType[]).map((t) => (
-                <button
-                  key={t}
-                  onClick={() => setDiscountType(t)}
-                  className={[
-                    "font-heading text-xs px-3 py-1.5 border border-dashed transition-colors",
-                    discountType === t
-                      ? "bg-orange text-bg border-orange"
-                      : "text-muted border-border hover:border-orange hover:text-orange",
-                  ].join(" ")}
-                >
-                  {t === "flat" ? "$ FLAT" : "% RATE"}
-                </button>
-              ))}
+      <div className="extras">
+        {/* Live totals preview */}
+        <div className="totals-card">
+          {svcCents !== 0 && (
+            <div className="totals-line add">
+              <span>Service charge ({svcNum}%)</span>
+              <span className="v">+{fmt(svcCents)}</span>
             </div>
+          )}
+          {gstCents !== 0 && (
+            <div className="totals-line add">
+              <span>GST ({gstNum}%)</span>
+              <span className="v">+{fmt(gstCents)}</span>
+            </div>
+          )}
+          {(discBefore + discAfter) !== 0 && (
+            <div className="totals-line sub-amt">
+              <span>Discount</span>
+              <span className="v">−{fmt(discBefore + discAfter)}</span>
+            </div>
+          )}
+          <div className="totals-divider" />
+          <div className="totals-line grand">
+            <span>GRAND TOTAL</span>
+            <span className="v">{fmt(preview)}</span>
           </div>
+        </div>
 
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2 flex-1 bg-surface border border-dashed border-border px-3 py-3">
-              <span className="font-heading text-sm text-muted">
-                {discountType === "flat" ? "$" : "%"}
-              </span>
+        {/* Service charge */}
+        <div className="extras-card">
+          <div className="card-head">
+            <div className="card-title">SERVICE CHARGE</div>
+            {svcNum > 0 && <div className="card-detect">{fmt(svcCents)}</div>}
+          </div>
+          <div className="pct-row">
+            <div className="pct-input-wrap">
               <input
+                className="pct-input"
                 type="number"
                 inputMode="decimal"
                 min="0"
-                step="0.01"
+                max="100"
+                value={svcPct}
+                onChange={(e) => setSvcPct(e.target.value)}
+                placeholder="0"
+              />
+              <span className="pct-suffix">%</span>
+            </div>
+            {svcNum > 0 && <div className="pct-impact pos">+{fmt(svcCents)}</div>}
+          </div>
+        </div>
+
+        {/* GST */}
+        <div className="extras-card">
+          <div className="card-head">
+            <div className="card-title">GST</div>
+            {gstNum > 0 && <div className="card-detect">{fmt(gstCents)}</div>}
+          </div>
+          <div className="pct-row">
+            <div className="pct-input-wrap">
+              <input
+                className="pct-input"
+                type="number"
+                inputMode="decimal"
+                min="0"
+                max="100"
+                value={gstPct}
+                onChange={(e) => setGstPct(e.target.value)}
+                placeholder="0"
+              />
+              <span className="pct-suffix">%</span>
+            </div>
+            {gstNum > 0 && <div className="pct-impact pos">+{fmt(gstCents)}</div>}
+          </div>
+        </div>
+
+        {/* Discount */}
+        <div className="extras-card">
+          <div className="card-head">
+            <div className="card-title">DISCOUNT</div>
+            {discNum > 0 && <div className="card-detect neg">{fmt(discBefore + discAfter)} off</div>}
+          </div>
+          <div className="seg-row">
+            <div className="seg">
+              <div className={`s-opt ${discountType === "flat" ? "on" : ""}`} onClick={() => setDiscountType("flat")}>$ FLAT</div>
+              <div className={`s-opt ${discountType === "percent" ? "on" : ""}`} onClick={() => setDiscountType("percent")}>% RATE</div>
+            </div>
+          </div>
+          <div className="pct-row">
+            <div className="pct-input-wrap">
+              <input
+                className="pct-input"
+                type="number"
+                inputMode="decimal"
+                min="0"
                 value={discountVal}
                 onChange={(e) => setDiscountVal(e.target.value)}
                 placeholder="0"
-                className="flex-1 bg-transparent font-heading text-sm text-text outline-none"
-                aria-label="Discount value"
               />
+              <span className="pct-suffix">{discountType === "flat" ? "SGD" : "%"}</span>
             </div>
+            {discNum > 0 && <div className="pct-impact neg">−{fmt(discBefore + discAfter)}</div>}
           </div>
-
-          {/* Discount timing */}
           {discNum > 0 && (
-            <div className="flex gap-2">
-              {(["before_tax", "after_tax"] as DiscountTiming[]).map((t) => (
-                <button
-                  key={t}
-                  onClick={() => setDiscountTiming(t)}
-                  className={[
-                    "flex-1 font-heading text-xs px-2 py-2 border border-dashed transition-colors",
-                    discountTiming === t
-                      ? "bg-orange/10 border-orange text-orange"
-                      : "text-muted border-border hover:border-muted",
-                  ].join(" ")}
-                >
-                  {t === "before_tax" ? "BEFORE TAX" : "AFTER TAX"}
-                </button>
-              ))}
+            <div className="toggle-row" style={{ marginTop: 8 }}>
+              <div className="t-label">Apply timing</div>
+              <div className="pill-switch">
+                <div className={`opt ${discountTiming === "before_tax" ? "on" : ""}`} onClick={() => setDiscountTiming("before_tax")}>BEFORE TAX</div>
+                <div className={`opt ${discountTiming === "after_tax" ? "on" : ""}`} onClick={() => setDiscountTiming("after_tax")}>AFTER TAX</div>
+              </div>
             </div>
           )}
         </div>
+      </div>
 
-        {/* Live preview */}
-        <div className="bg-surface border border-dashed border-border p-4 flex flex-col gap-2">
-          <p className="font-heading text-xs text-muted tracking-wider mb-1">PREVIEW</p>
-          <PreviewRow label="Items subtotal" valueCents={subtotal} />
-          {svcCents !== 0 && (
-            <PreviewRow label={`Service charge (${svcNum}%)`} valueCents={svcCents} />
-          )}
-          {gstCents !== 0 && (
-            <PreviewRow label={`GST (${gstNum}%)`} valueCents={gstCents} />
-          )}
-          {(discBefore !== 0 || discAfter !== 0) && (
-            <PreviewRow
-              label={`Discount${discountTiming === "before_tax" ? " (before tax)" : " (after tax)"}`}
-              valueCents={-(discBefore + discAfter)}
-            />
-          )}
-          <div className="border-t border-dashed border-border pt-2 mt-1 flex items-center justify-between">
-            <span className="font-heading text-xs text-text">GRAND TOTAL</span>
-            <span className="font-heading text-lg text-orange">{formatCents(preview)}</span>
-          </div>
+      <div className="bottom-bar">
+        <div className="cta-row">
+          <button className="cta cta-ghost" onClick={() => router.push("/items")} style={{ flex: "0 0 auto", padding: "14px 16px" }}>◂</button>
+          <button
+            className="cta"
+            onClick={handleCalculate}
+            disabled={lineItems.length === 0 || participants.length === 0}
+          >
+            ▸ CALCULATE SPLIT
+          </button>
         </div>
       </div>
-
-      {/* Footer */}
-      <div className="px-4 pb-8 pt-4 border-t border-dashed border-border">
-        <Button variant="primary" size="lg" fullWidth onClick={handleCalculate}>
-          CALCULATE SPLIT →
-        </Button>
-      </div>
-    </main>
-  );
-}
-
-function FieldRow({
-  label,
-  sublabel,
-  value,
-  onChange,
-  suffix,
-  placeholder,
-}: {
-  label: string;
-  sublabel?: string;
-  value: string;
-  onChange: (v: string) => void;
-  suffix?: string;
-  placeholder?: string;
-}) {
-  return (
-    <div className="flex flex-col gap-2">
-      <div className="flex items-baseline gap-2">
-        <span className="font-heading text-xs text-muted">{label}</span>
-        {sublabel && (
-          <span className="font-body text-xs text-muted/60">{sublabel}</span>
-        )}
-      </div>
-      <div className="flex items-center gap-2 bg-surface border border-dashed border-border px-3 py-3">
-        <input
-          type="number"
-          inputMode="decimal"
-          min="0"
-          max="100"
-          step="0.1"
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          placeholder={placeholder}
-          className="flex-1 bg-transparent font-heading text-sm text-text outline-none"
-          aria-label={label}
-        />
-        {suffix && (
-          <span className="font-heading text-sm text-muted">{suffix}</span>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function PreviewRow({ label, valueCents }: { label: string; valueCents: number }) {
-  return (
-    <div className="flex items-center justify-between">
-      <span className="font-body text-xs text-muted">{label}</span>
-      <span
-        className={[
-          "font-heading text-xs",
-          valueCents < 0 ? "text-green" : "text-text",
-        ].join(" ")}
-      >
-        {valueCents < 0 ? `-${formatCents(-valueCents)}` : formatCents(valueCents)}
-      </span>
     </div>
   );
 }
