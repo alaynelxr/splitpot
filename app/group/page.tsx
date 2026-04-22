@@ -26,8 +26,6 @@ export default function GroupPage() {
     return [
       { id: "p0", name: "You", hue: "mint" as PersonHue, color: HUE_COLORS.mint, me: true },
       { id: "p1", name: "", hue: "pink" as PersonHue, color: HUE_COLORS.pink },
-      { id: "p2", name: "", hue: "gold" as PersonHue, color: HUE_COLORS.gold },
-      { id: "p3", name: "", hue: "violet" as PersonHue, color: HUE_COLORS.violet },
     ];
   });
 

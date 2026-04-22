@@ -89,7 +89,7 @@ export default function ItemsPage() {
       <div className="items-scroll">
         <div className="items-heading">
           <div className="title">▸ LINE ITEMS</div>
-          <div className="count">{lineItems.length} · tap to assign · long-press to batch</div>
+          <div className="count">{lineItems.length} · tap icon to assign · long-press to batch</div>
         </div>
 
         {hasUnclear && (
@@ -118,12 +118,9 @@ export default function ItemsPage() {
       </div>
 
       <div className="bottom-bar">
-        <div className="add-item" onClick={() => addLineItem({ name: "New Item", priceCents: 0, assignedTo: [] })}>
-          + ADD ITEM
-        </div>
         <div className="cta-row">
-          <button className="cta cta-ghost" onClick={() => router.push("/group")} style={{ flex: "0 0 auto", padding: "14px 16px" }}>◂</button>
-          <button className="cta" onClick={() => router.push("/extras")}>▸ NEXT · BILL EXTRAS</button>
+          <button className="cta cta-ghost" style={{ flex: 1 }} onClick={() => addLineItem({ name: "New Item", priceCents: 0, assignedTo: [] })}>+ ADD ITEM</button>
+          <button className="cta" style={{ flex: 1 }} onClick={() => router.push("/extras")}>▸ BILL EXTRAS</button>
         </div>
       </div>
 

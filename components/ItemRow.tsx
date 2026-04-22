@@ -2,7 +2,6 @@
 
 import { useState, useRef, useCallback } from "react";
 import type { LineItem, Participant } from "@/types";
-import { AvatarDot } from "./AvatarDot";
 import { Crab, Prawn, Mushroom, Tofu, Chili, Egg, HotPot } from "./PixelArt";
 
 const fmt = (cents: number) => `S$${(cents / 100).toFixed(2)}`;
@@ -40,7 +39,7 @@ export function ItemRow({
   const [editingPrice, setEditingPrice] = useState(false);
   const startX = useRef<number | null>(null);
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const pressedRef = useRef(false);
+  const longPressFired = useRef(false);
 
   const assignedIds = item.assignedTo.length === 0 ? people.map((p) => p.id) : item.assignedTo;
   const isAll = item.assignedTo.length === 0;
@@ -50,25 +49,22 @@ export function ItemRow({
     .map((id) => people.find((p) => p.id === id))
     .filter(Boolean) as Participant[];
 
-  const onPointerDown = useCallback((e: React.PointerEvent) => {
-    // Capture so we receive pointermove/pointerup even if the browser scrolls
+  // ── Card-level handlers: swipe to delete + long-press to multi-select ──
+
+  const onCardPointerDown = useCallback((e: React.PointerEvent) => {
     e.currentTarget.setPointerCapture(e.pointerId);
     startX.current = e.clientX;
-    pressedRef.current = true;
+    longPressFired.current = false;
     longPressTimer.current = setTimeout(() => {
-      if (pressedRef.current) {
-        pressedRef.current = false; // consumed by long press
-        onToggleSelect(item.id, true);
-        navigator.vibrate?.(30);
-      }
+      longPressFired.current = true;
+      onToggleSelect(item.id, true);
+      navigator.vibrate?.(30);
     }, 450);
   }, [item.id, onToggleSelect]);
 
-  const onPointerMove = useCallback((e: React.PointerEvent) => {
+  const onCardPointerMove = useCallback((e: React.PointerEvent) => {
     if (startX.current === null) return;
     const dx = e.clientX - startX.current;
-    // Cancel long-press on horizontal movement, but don't touch pressedRef —
-    // that flag is now only for tracking whether the long-press timer fired.
     if (Math.abs(dx) > 8 && longPressTimer.current) {
       clearTimeout(longPressTimer.current);
       longPressTimer.current = null;
@@ -77,29 +73,38 @@ export function ItemRow({
     else setSwipeX(0);
   }, []);
 
-  const onPointerUp = useCallback((e: React.PointerEvent) => {
+  const onCardPointerUp = useCallback(() => {
     if (longPressTimer.current) { clearTimeout(longPressTimer.current); longPressTimer.current = null; }
-    // pressedRef is false only if the long-press timer already fired and consumed the press
-    const didLongPress = !pressedRef.current;
-    pressedRef.current = false;
     if (swipeX < -60) {
       onDelete(item.id);
-      setSwipeX(0);
-      startX.current = null;
-      return;
     }
     setSwipeX(0);
-    if (!didLongPress && startX.current !== null) {
-      const dx = e.clientX - startX.current;
-      // Use 10px threshold — Android taps can have a few pixels of drift
-      if (Math.abs(dx) < 10 && !editingName && !editingPrice) {
-        if (multiSelectMode) onToggleSelect(item.id);
-        else if (item.unclear) onOpenFix(item.id);
-        else onOpenSheet(item.id);
-      }
-    }
     startX.current = null;
-  }, [swipeX, item, editingName, editingPrice, multiSelectMode, onDelete, onToggleSelect, onOpenFix, onOpenSheet]);
+  }, [swipeX, item.id, onDelete]);
+
+  const onCardPointerCancel = useCallback(() => {
+    if (longPressTimer.current) { clearTimeout(longPressTimer.current); longPressTimer.current = null; }
+    setSwipeX(0);
+    startX.current = null;
+    longPressFired.current = false;
+  }, []);
+
+  // ── Icon tap: opens assign sheet (or fix sheet / multi-select toggle) ──
+
+  const onIconPointerDown = useCallback((e: React.PointerEvent) => {
+    e.stopPropagation(); // prevent card long-press timer from starting
+  }, []);
+
+  const onIconPointerUp = useCallback((e: React.PointerEvent) => {
+    e.stopPropagation();
+    if (multiSelectMode) {
+      onToggleSelect(item.id);
+    } else if (item.unclear) {
+      onOpenFix(item.id);
+    } else {
+      onOpenSheet(item.id);
+    }
+  }, [item, multiSelectMode, onOpenSheet, onOpenFix, onToggleSelect]);
 
   const HUE_BG: Record<string, string> = {
     mint: "var(--mint)", pink: "var(--pink)", gold: "var(--gold)", violet: "var(--violet)",
@@ -111,13 +116,10 @@ export function ItemRow({
       <div
         className={`item ${selected ? "selected" : ""} ${isSolo ? "individual" : ""} ${item.unclear ? "unclear" : ""}`}
         style={{ transform: `translateX(${swipeX}px)`, touchAction: "pan-y" }}
-        onPointerDown={onPointerDown}
-        onPointerMove={onPointerMove}
-        onPointerUp={onPointerUp}
-        onPointerCancel={() => {
-          if (longPressTimer.current) clearTimeout(longPressTimer.current);
-          setSwipeX(0); startX.current = null; pressedRef.current = false;
-        }}
+        onPointerDown={onCardPointerDown}
+        onPointerMove={onCardPointerMove}
+        onPointerUp={onCardPointerUp}
+        onPointerCancel={onCardPointerCancel}
       >
         {multiSelectMode && (
           <div style={{
@@ -130,7 +132,17 @@ export function ItemRow({
           }}>{selected ? "✓" : ""}</div>
         )}
 
-        <div style={{ width: 34, height: 34, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+        {/* Icon — tap target for assign sheet */}
+        <div
+          style={{
+            width: 44, height: 44,
+            display: "flex", alignItems: "center", justifyContent: "center",
+            flexShrink: 0, cursor: "pointer", touchAction: "manipulation",
+            borderRadius: 8,
+          }}
+          onPointerDown={onIconPointerDown}
+          onPointerUp={onIconPointerUp}
+        >
           <ItemIcon name={item.name} />
         </div>
 
@@ -156,7 +168,7 @@ export function ItemRow({
           </div>
           <div className="item-meta">
             {item.unclear ? (
-              <span className="badge badge-unclear">⚠ TAP TO FIX</span>
+              <span className="badge badge-unclear">⚠ TAP ICON TO FIX</span>
             ) : (
               <>
                 {isAll && <span className="badge badge-all">ALL · {people.length}</span>}

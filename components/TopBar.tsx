@@ -20,8 +20,11 @@ export function TopBar({ subtotal, step, onBack, billName }: Props) {
               onClick={onBack}
               style={{
                 fontFamily: "var(--font-pixel), 'Press Start 2P', monospace",
-                fontSize: 10, color: "var(--ink-dim)", cursor: "pointer",
-                padding: "4px 6px", border: "1px solid var(--surface-2)", borderRadius: 4,
+                fontSize: 13, color: "var(--violet)", cursor: "pointer",
+                padding: "7px 10px", border: "1.5px solid var(--violet)",
+                borderRadius: 6, lineHeight: 1,
+                boxShadow: "0 0 8px rgba(179,123,255,0.25)",
+                touchAction: "manipulation",
               }}
             >◂</div>
           )}

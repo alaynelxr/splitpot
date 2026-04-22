@@ -91,7 +91,7 @@ html, body {
   background: #000;
   color: var(--ink);
   font-family: var(--font-mono), 'JetBrains Mono', ui-monospace, monospace;
-  min-height: 100%;
+  height: 100%;
   overflow-x: hidden;
   -webkit-font-smoothing: antialiased;
 }
@@ -107,11 +107,12 @@ body {
 #app-shell {
   max-width: 430px;
   margin: 0 auto;
-  min-height: 100vh;
+  height: 100dvh;
   display: flex;
   flex-direction: column;
   position: relative;
   background: var(--bg);
+  overflow: hidden;
 }
 
 .pixel-font {
@@ -138,7 +139,6 @@ body {
   background: var(--bg);
   color: var(--ink);
   height: 100%;
-  min-height: 100vh;
   display: flex;
   flex-direction: column;
   position: relative;
@@ -593,7 +593,7 @@ body {
   background: radial-gradient(ellipse at 50% 30%, rgba(179,123,255,0.18), transparent 60%),
               linear-gradient(180deg, var(--bg-2), var(--bg));
   border: 1.5px solid var(--surface-2); border-radius: 12px;
-  position: relative; overflow: hidden; min-height: 240px;
+  position: relative; overflow: hidden; min-height: 160px;
   display: flex; align-items: center; justify-content: center;
   box-shadow: inset 0 0 30px rgba(0,0,0,0.4);
 }
@@ -893,3 +893,17 @@ body {
 ::-webkit-scrollbar { width: 4px; }
 ::-webkit-scrollbar-track { background: var(--bg); }
 ::-webkit-scrollbar-thumb { background: var(--surface-2); border-radius: 2px; }
+
+/* ── Short-screen responsive (e.g. Pixel 8 with browser chrome visible) ─── */
+@media (max-height: 700px) {
+  .capture { padding: 8px 18px 12px; }
+  .capture-hero { padding: 4px 0 2px; }
+  .capture-hero .brand-big { font-size: 18px; margin-top: 6px; }
+  .capture-hero .tag { margin-top: 4px; }
+  .arcade-stage { margin: 10px -4px; min-height: 140px; }
+  .capture-ctas { gap: 8px; padding-top: 2px; }
+  .capture-footer { padding-top: 6px; }
+  .setup-hero { padding: 10px 18px 6px; }
+  .setup-hero .setup-crab { display: none; }
+  .processing { gap: 12px; }
+}
