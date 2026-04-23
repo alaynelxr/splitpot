@@ -26,6 +26,7 @@ export default function ItemsPage() {
   const participants = useSplitStore((s) => s.participants);
   const lineItems = useSplitStore((s) => s.lineItems);
   const restaurantName = useSplitStore((s) => s.restaurantName);
+  const receiptDate = useSplitStore((s) => s.receiptDate);
   const addLineItem = useSplitStore((s) => s.addLineItem);
   const updateLineItem = useSplitStore((s) => s.updateLineItem);
   const removeLineItem = useSplitStore((s) => s.removeLineItem);
@@ -73,7 +74,7 @@ export default function ItemsPage() {
 
   return (
     <div className="app scanlines" style={{ position: "relative" }}>
-      <TopBar subtotal={subtotal} step={4} onBack={() => router.push("/group")} billName={restaurantName} />
+      <TopBar subtotal={subtotal} step={4} onBack={() => router.push("/group")} billName={restaurantName} receiptDate={receiptDate} />
       <PeopleRow people={participants} totals={totals} />
 
       {multiSelectMode && (
@@ -88,8 +89,11 @@ export default function ItemsPage() {
 
       <div className="items-scroll">
         <div className="items-heading">
-          <div className="title">▸ LINE ITEMS</div>
-          <div className="count">{lineItems.length} · tap icon to assign · long-press to batch</div>
+          <div className="heading-row">
+            <div className="title">▸ LINE ITEMS</div>
+            <div className="count">{lineItems.length}</div>
+          </div>
+          <div className="hint">tap icon to assign · long-press to batch</div>
         </div>
 
         {hasUnclear && (
@@ -118,6 +122,9 @@ export default function ItemsPage() {
       </div>
 
       <div className="bottom-bar">
+        <div style={{ fontSize: 10, color: "var(--ink-faint)", textAlign: "center", paddingBottom: 6 }}>
+          Service charge &amp; GST applied at next step
+        </div>
         <div className="cta-row">
           <button className="cta cta-ghost" style={{ flex: 1 }} onClick={() => addLineItem({ name: "New Item", priceCents: 0, assignedTo: [] })}>+ ADD ITEM</button>
           <button className="cta" style={{ flex: 1 }} onClick={() => router.push("/extras")}>▸ BILL EXTRAS</button>
@@ -125,7 +132,13 @@ export default function ItemsPage() {
       </div>
 
       {sheetItem && (
-        <AssignSheet item={sheetItem} people={participants} onClose={() => setSheetItemId(null)} onApply={applyAssignment} />
+        <AssignSheet
+          item={sheetItem}
+          people={participants}
+          onClose={() => setSheetItemId(null)}
+          onApply={applyAssignment}
+          onDelete={() => { removeLineItem(sheetItem.id); setSheetItemId(null); }}
+        />
       )}
       {fixItem && (
         <FixSheet

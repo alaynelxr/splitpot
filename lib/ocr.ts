@@ -9,6 +9,7 @@ export interface OcrProgress {
 
 export interface OcrResult {
   restaurantName: string | null;
+  receiptDate: string | null;
   lineItems: LineItem[];
   serviceChargePct: number | null;
   gstPct: number | null;
@@ -32,6 +33,20 @@ const GST_KEYWORDS = [
   /tax/i,
 ];
 
+/**
+ * Checked against the raw line (before name extraction) — patterns where the
+ * full original string is needed for reliable detection (dates, timestamps, addresses).
+ */
+const LINE_SKIP_PATTERNS: RegExp[] = [
+  /\b\d{1,2}[\/\-.]\d{1,2}[\/\-.]\d{2,4}\b/,   // DD/MM/YYYY, MM/DD/YYYY, etc.
+  /\b\d{4}[\/\-.]\d{1,2}[\/\-.]\d{1,2}\b/,       // YYYY-MM-DD
+  /\b\d{1,2}:\d{2}(?::\d{2})?\b/,                  // HH:MM or HH:MM:SS timestamps
+  /#\s*\d{2,3}-\d{2,4}\b/,                         // unit numbers e.g. #01-23
+  /\b(blk|block|jln|jalan|street|st|road|rd|avenue|ave|drive|dr|lane|ln|crescent)\b/i,
+  /\btel\.?\s*(no\.?)?\s*[:\d+]/i,                 // phone lines
+  /\bgst\s*(reg|registration)?\s*no\b/i,           // GST reg number
+];
+
 const SKIP_KEYWORDS = [
   /subtotal/i,
   /sub\s*total/i,
@@ -49,6 +64,8 @@ const SKIP_KEYWORDS = [
   /table/i,
   /cover/i,
   /pax/i,
+  /\b(tel|fax|hp|phone|hotline|website|www|uen|co\.?\s*reg)\b/i,
+  /\btotal\b/i,
 ];
 
 let idCounter = 0;
@@ -181,15 +198,20 @@ function matchPrice(line: string): { matchStr: string; cents: number } | null {
 export function parseReceiptText(rawText: string): OcrResult {
   const lines = rawText
     .split("\n")
-    .map((l) => l.trim())
+    .map((l) => l.trim().replace(/[-*~|\\©®™°•·]+$/, "").trim())
     .filter(Boolean);
 
   console.log("[OCR] parseReceiptText: total non-empty lines:", lines.length);
   console.log("[OCR] Full raw text:\n" + rawText);
 
+  const receiptDate = extractReceiptDateTime(lines);
+  console.log("[OCR] receiptDate:", receiptDate);
+
   let restaurantName: string | null = null;
   let serviceChargePct: number | null = null;
+  let serviceChargeCentsRaw: number | null = null;
   let gstPct: number | null = null;
+  let gstCentsRaw: number | null = null;
   const lineItems: LineItem[] = [];
 
   // Attempt to extract restaurant name from the first 1–3 non-empty lines
@@ -223,6 +245,12 @@ export function parseReceiptText(rawText: string): OcrResult {
       continue;
     }
 
+    // Skip date/address lines before name extraction (check raw line with original punctuation)
+    if (LINE_SKIP_PATTERNS.some((re) => re.test(line))) {
+      console.log(`[OCR] SKIP (date/address): "${line}"`);
+      continue;
+    }
+
     // Extract item name: everything before the price
     const namePart = line.slice(0, line.lastIndexOf(matchStr)).trim();
     const cleanName = namePart.replace(/[^\w\s'&\-()]/g, " ").replace(/\s+/g, " ").trim();
@@ -239,10 +267,13 @@ export function parseReceiptText(rawText: string): OcrResult {
 
     // Detect service charge
     if (SERVICE_KEYWORDS.some((re) => re.test(cleanName))) {
-      const pct = extractPercent(line) ?? (priceCents / 100);
-      console.log(`[OCR] SERVICE CHARGE: "${line}" → ${pct}%`);
+      const pct = extractPercent(line);
       if (pct !== null && pct > 0 && pct <= 30) {
         serviceChargePct = pct;
+        console.log(`[OCR] SERVICE CHARGE (explicit %): "${line}" → ${pct}%`);
+      } else {
+        serviceChargeCentsRaw = priceCents;
+        console.log(`[OCR] SERVICE CHARGE (raw amount): "${line}" → ${priceCents}¢`);
       }
       continue;
     }
@@ -250,9 +281,12 @@ export function parseReceiptText(rawText: string): OcrResult {
     // Detect GST
     if (GST_KEYWORDS.some((re) => re.test(cleanName))) {
       const pct = extractPercent(line);
-      console.log(`[OCR] GST: "${line}" → ${pct}%`);
       if (pct !== null && pct > 0 && pct <= 20) {
         gstPct = pct;
+        console.log(`[OCR] GST (explicit %): "${line}" → ${pct}%`);
+      } else {
+        gstCentsRaw = priceCents;
+        console.log(`[OCR] GST (raw amount): "${line}" → ${priceCents}¢`);
       }
       continue;
     }
@@ -266,14 +300,70 @@ export function parseReceiptText(rawText: string): OcrResult {
     });
   }
 
-  console.log(`[OCR] Parse result: ${lineItems.length} items, restaurant="${restaurantName}", svc=${serviceChargePct}%, gst=${gstPct}%`);
+  // Back-calculate percentages from raw charge amounts when no explicit % was on the receipt.
+  // Service charge base = items subtotal; GST base = subtotal + service charge.
+  const subtotalCents = lineItems.reduce((sum, item) => sum + item.priceCents, 0);
+  if (serviceChargePct === null && serviceChargeCentsRaw !== null && subtotalCents > 0) {
+    serviceChargePct = Math.round((serviceChargeCentsRaw / subtotalCents) * 1000) / 10;
+    console.log(`[OCR] SERVICE CHARGE back-calculated: ${serviceChargeCentsRaw}¢ / ${subtotalCents}¢ → ${serviceChargePct}%`);
+  }
+  if (gstPct === null && gstCentsRaw !== null) {
+    const svcCents = serviceChargePct !== null ? Math.round(subtotalCents * serviceChargePct / 100) : (serviceChargeCentsRaw ?? 0);
+    const gstBase = subtotalCents + svcCents;
+    if (gstBase > 0) {
+      gstPct = Math.round((gstCentsRaw / gstBase) * 1000) / 10;
+      console.log(`[OCR] GST back-calculated: ${gstCentsRaw}¢ / ${gstBase}¢ → ${gstPct}%`);
+    }
+  }
+
+  console.log(`[OCR] Parse result: ${lineItems.length} items, restaurant="${restaurantName}", date="${receiptDate}", svc=${serviceChargePct}%, gst=${gstPct}%`);
   return {
     restaurantName,
+    receiptDate,
     lineItems,
     serviceChargePct,
     gstPct,
     rawText,
   };
+}
+
+const MONTHS_SHORT = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+
+function extractReceiptDateTime(lines: string[]): string | null {
+  const dateRe = /\b(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})\b/;
+  const timeRe = /\b(\d{1,2}):(\d{2})(?::\d{2})?\s*(am|pm)?\b/i;
+
+  for (const line of lines) {
+    const dateMatch = line.match(dateRe);
+    if (!dateMatch) continue;
+
+    let d = parseInt(dateMatch[1], 10);
+    let m = parseInt(dateMatch[2], 10) - 1; // 0-indexed
+    let y = parseInt(dateMatch[3], 10);
+    if (y < 100) y += 2000;
+
+    // If parsing as DD/MM gives month > 11, it's MM/DD — swap
+    if (m > 11) { [d, m] = [m + 1, d - 1]; }
+    if (m < 0 || m > 11 || d < 1 || d > 31) continue;
+
+    const timeMatch = line.match(timeRe);
+    let timeStr = "";
+    if (timeMatch) {
+      const h = parseInt(timeMatch[1], 10);
+      const min = timeMatch[2];
+      const ampm = timeMatch[3]?.toLowerCase();
+      if (ampm) {
+        timeStr = `, ${h}.${min}${ampm}`;
+      } else {
+        const isPm = h >= 12;
+        const displayH = h === 0 ? 12 : h > 12 ? h - 12 : h;
+        timeStr = `, ${displayH}.${min}${isPm ? "pm" : "am"}`;
+      }
+    }
+
+    return `${d} ${MONTHS_SHORT[m]} ${y}${timeStr}`;
+  }
+  return null;
 }
 
 function titleCase(str: string): string {

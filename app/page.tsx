@@ -35,6 +35,7 @@ export default function CapturePage() {
         <div className="capture-hero">
           <div className="brand-big">SPLITPOT</div>
           <div className="tag">Snap the bill · let the crab crunch it</div>
+          <div style={{ fontSize: 10, color: "var(--ink-faint)", marginTop: 6, letterSpacing: "0.05em" }}>No account needed</div>
         </div>
 
         <div className="arcade-stage">
@@ -98,7 +99,6 @@ export default function CapturePage() {
             <div className="cap-badge">SVC AUTO</div>
             <div className="cap-badge">ROUND: EXACT</div>
           </div>
-          <div style={{ marginTop: 10 }}>No account needed</div>
         </div>
 
         <input ref={cameraRef} type="file" accept="image/*" capture="environment"

@@ -186,13 +186,8 @@ body {
   background: var(--surface);
   border: 1px solid transparent;
   min-width: 54px;
-  cursor: pointer;
-  transition: transform 0.1s;
-}
-.person-chip:active { transform: scale(0.96); }
-.person-chip.me {
-  border-color: var(--mint);
-  box-shadow: 0 0 0 1px var(--mint), 0 0 12px rgba(63,255,200,0.2);
+  cursor: default;
+  pointer-events: none;
 }
 .person-chip .name {
   font-size: 9px; color: var(--ink);
@@ -203,7 +198,6 @@ body {
   font-size: 9px; color: var(--ink-dim);
   font-variant-numeric: tabular-nums;
 }
-.person-chip.me .subtotal { color: var(--mint); }
 
 /* ── Items list ──────────────────────────────────── */
 .items-scroll {
@@ -215,14 +209,18 @@ body {
 .items-scroll::-webkit-scrollbar { display: none; }
 
 .items-heading {
-  display: flex; justify-content: space-between; align-items: baseline;
+  display: flex; flex-direction: column;
   padding: 10px 6px 6px;
+}
+.items-heading .heading-row {
+  display: flex; justify-content: space-between; align-items: baseline;
 }
 .items-heading .title {
   font-family: var(--font-pixel), 'Press Start 2P', monospace;
   font-size: 9px; color: var(--ink-dim); letter-spacing: 0.1em;
 }
 .items-heading .count { font-size: 10px; color: var(--ink-faint); }
+.items-heading .hint { font-size: 12px; color: var(--ink-dim); margin-top: 5px; }
 
 /* ── Item row ────────────────────────────────────── */
 .item {
@@ -539,6 +537,7 @@ body {
   transition: border-color 0.15s;
 }
 .player-slot.me { border-color: var(--mint-dim); background: linear-gradient(135deg, rgba(63,255,200,0.08), var(--surface)); }
+.player-slot.duplicate { border-color: var(--pink); background: linear-gradient(135deg, rgba(255,58,163,0.06), var(--surface)); }
 .player-slot.empty { border-style: dashed; border-color: var(--ink-faint); background: transparent; }
 .player-slot.empty .hint { color: var(--ink-faint); font-size: 12px; flex: 1; }
 .player-slot input.name-input {

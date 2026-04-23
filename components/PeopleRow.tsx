@@ -14,7 +14,7 @@ export function PeopleRow({ people, totals }: Props) {
   return (
     <div className="people-row">
       {people.map((p) => (
-        <div key={p.id} className={`person-chip ${p.me ? "me" : ""}`}>
+        <div key={p.id} className="person-chip">
           <AvatarDot name={p.name} hue={p.hue} size={24} />
           <div className="name">{p.name}</div>
           <div className="subtotal">{fmt(totals[p.id] ?? 0)}</div>

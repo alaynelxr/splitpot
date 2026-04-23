@@ -30,7 +30,13 @@ export default function GroupPage() {
   });
 
   const filledCount = people.filter((p) => p.name.trim()).length;
-  const canContinue = filledCount >= 2;
+  const nameCounts = people.reduce<Record<string, number>>((acc, p) => {
+    const key = p.name.trim().toLowerCase();
+    if (key) acc[key] = (acc[key] ?? 0) + 1;
+    return acc;
+  }, {});
+  const hasDuplicates = Object.values(nameCounts).some((c) => c > 1);
+  const canContinue = filledCount >= 2 && !hasDuplicates;
   const atMax = people.length >= MAX;
 
   const updateName = (id: string, name: string) =>
@@ -81,7 +87,6 @@ export default function GroupPage() {
 
       <div style={{ flex: 1, overflowY: "auto", paddingBottom: 110 }}>
         <div className="setup-hero">
-          <div className="eyebrow">◂ STEP 02 / 06 ▸</div>
           <div className="setup-crab">
             <Crab px={3} />
           </div>
@@ -101,7 +106,8 @@ export default function GroupPage() {
         <div className="player-list">
           {people.map((p, i) => {
             const filled = !!p.name.trim();
-            const cls = p.me ? "me" : filled ? "filled" : "empty";
+            const isDuplicate = filled && nameCounts[p.name.trim().toLowerCase()] > 1;
+            const cls = isDuplicate ? "duplicate" : p.me ? "me" : filled ? "filled" : "empty";
             return (
               <div key={p.id} className={`player-slot ${cls}`}>
                 <div className="pidx">P{String(i + 1).padStart(2, "0")}</div>

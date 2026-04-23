@@ -7,6 +7,7 @@ import { calculateSplits } from "@/lib/calculations";
 
 interface SplitStore extends SplitSession {
   setRestaurantName: (name: string | null) => void;
+  setReceiptDate: (date: string | null) => void;
   setRawImage: (dataUrl: string | null) => void;
   addParticipant: (name: string, isMe?: boolean) => void;
   removeParticipant: (id: string) => void;
@@ -33,6 +34,7 @@ const defaultExtras: BillExtras = {
 
 const defaultSession: SplitSession = {
   restaurantName: null,
+  receiptDate: null,
   date: new Date().toISOString(),
   rawImage: null,
   participants: [],
@@ -50,6 +52,7 @@ export const useSplitStore = create<SplitStore>((set, get) => ({
   ...defaultSession,
 
   setRestaurantName: (name) => set({ restaurantName: name }),
+  setReceiptDate: (date) => set({ receiptDate: date }),
   setRawImage: (dataUrl) => set({ rawImage: dataUrl }),
 
   addParticipant: (name, isMe = false) => {

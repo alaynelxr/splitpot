@@ -12,9 +12,10 @@ interface Props {
   people: Participant[];
   onClose: () => void;
   onApply: (assignedTo: string[]) => void;
+  onDelete?: () => void;
 }
 
-export function AssignSheet({ item, multiItems, people, onClose, onApply }: Props) {
+export function AssignSheet({ item, multiItems, people, onClose, onApply, onDelete }: Props) {
   const target = item ?? multiItems?.[0] ?? null;
   const initialIds = target
     ? (target.assignedTo.length === 0 ? people.map((p) => p.id) : target.assignedTo)
@@ -30,10 +31,6 @@ export function AssignSheet({ item, multiItems, people, onClose, onApply }: Prop
   };
   const setAll = () => setSelected(new Set(people.map((p) => p.id)));
   const setNone = () => setSelected(new Set());
-  const setOnlyMe = () => {
-    const me = people.find((p) => p.me);
-    setSelected(new Set(me ? [me.id] : []));
-  };
 
   const allSelected = selected.size === people.length;
   const noneSelected = selected.size === 0;
@@ -59,8 +56,8 @@ export function AssignSheet({ item, multiItems, people, onClose, onApply }: Prop
         <div className="sheet-handle" />
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
           <div>
-            <div className="sheet-title">Who had this?</div>
-            <div className="sheet-sub">{title}</div>
+            <div className="sheet-title">{title}</div>
+            <div className="sheet-sub">Who had this?</div>
           </div>
           <div style={{ textAlign: "right" }}>
             <div style={{ fontFamily: "var(--font-pixel), 'Press Start 2P', monospace", fontSize: 14, color: "var(--gold)", textShadow: "0 0 6px rgba(255,212,71,0.4)" }}>
@@ -85,8 +82,14 @@ export function AssignSheet({ item, multiItems, people, onClose, onApply }: Prop
 
         <div className="quick-row">
           <div className="quick" onClick={setAll}>ALL {people.length}</div>
-          <div className="quick" onClick={setOnlyMe}>JUST ME</div>
           <div className="quick" onClick={setNone}>CLEAR</div>
+          {onDelete && (
+            <div
+              className="quick"
+              onClick={onDelete}
+              style={{ color: "var(--pink)", borderColor: "var(--pink)" }}
+            >DELETE</div>
+          )}
         </div>
 
         <div className="sheet-price-hint">

@@ -93,9 +93,13 @@ export function ItemRow({
 
   const onIconPointerDown = useCallback((e: React.PointerEvent) => {
     e.stopPropagation(); // prevent card long-press timer from starting
+    e.currentTarget.setPointerCapture(e.pointerId); // ensure pointerup targets the icon, not the card
   }, []);
 
-  const onIconPointerUp = useCallback((e: React.PointerEvent) => {
+  // onClick instead of onPointerUp: on Android Chrome inside a pan-y container,
+  // quick taps fire pointercancel (not pointerup), silently dropping the action.
+  // click fires after the browser resolves the gesture and is not affected by pointercancel.
+  const onIconClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
     if (multiSelectMode) {
       onToggleSelect(item.id);
@@ -137,11 +141,11 @@ export function ItemRow({
           style={{
             width: 44, height: 44,
             display: "flex", alignItems: "center", justifyContent: "center",
-            flexShrink: 0, cursor: "pointer", touchAction: "manipulation",
+            flexShrink: 0, cursor: "pointer", touchAction: "none",
             borderRadius: 8,
           }}
           onPointerDown={onIconPointerDown}
-          onPointerUp={onIconPointerUp}
+          onClick={onIconClick}
         >
           <ItemIcon name={item.name} />
         </div>

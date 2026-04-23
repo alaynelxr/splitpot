@@ -5,12 +5,18 @@ interface Props {
   step?: number;
   onBack?: () => void;
   billName?: string | null;
+  receiptDate?: string | null;
 }
 
 const fmt = (cents: number) => `S$${(cents / 100).toFixed(2)}`;
 
-export function TopBar({ subtotal, step, onBack, billName }: Props) {
+export function TopBar({ subtotal, step, onBack, billName, receiptDate }: Props) {
   const hasName = billName?.trim();
+  const subtitle = hasName && receiptDate
+    ? `${billName} · ${receiptDate}`
+    : hasName
+    ? billName!
+    : receiptDate || "New Split";
   return (
     <div className="topbar">
       <div className="topbar-row">
@@ -32,7 +38,7 @@ export function TopBar({ subtotal, step, onBack, billName }: Props) {
             <div className="brand">▸ SPLITPOT</div>
             {step !== 1 && (
               <div style={{ fontSize: 10, color: "var(--ink-faint)", marginTop: 3 }}>
-                {step === 2 ? "New Split · Setup" : (hasName ? billName : "New Split")}
+                {step === 2 ? "New Split · Setup" : subtitle}
               </div>
             )}
           </div>

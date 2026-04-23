@@ -12,6 +12,7 @@ export default function ProcessingPage() {
   const rawImage = useSplitStore((s) => s.rawImage);
   const setLineItems = useSplitStore((s) => s.setLineItems);
   const setRestaurantName = useSplitStore((s) => s.setRestaurantName);
+  const setReceiptDate = useSplitStore((s) => s.setReceiptDate);
   const setExtras = useSplitStore((s) => s.setExtras);
 
   const [progress, setProgress] = useState(0);
@@ -64,6 +65,7 @@ export default function ProcessingPage() {
 
         setLineItems(result.lineItems);
         setRestaurantName(result.restaurantName);
+        setReceiptDate(result.receiptDate);
         setExtras({ serviceChargePct: result.serviceChargePct ?? 0, gstPct: result.gstPct ?? 0 });
         router.replace("/group");
       } catch (err) {

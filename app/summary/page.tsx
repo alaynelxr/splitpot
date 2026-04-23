@@ -69,6 +69,7 @@ export default function SummaryPage() {
   const splits = useSplitStore((s) => s.splits);
   const participants = useSplitStore((s) => s.participants);
   const restaurantName = useSplitStore((s) => s.restaurantName);
+  const receiptDate = useSplitStore((s) => s.receiptDate);
   const reset = useSplitStore((s) => s.reset);
 
   const [copied, setCopied] = useState(false);
@@ -102,7 +103,7 @@ export default function SummaryPage() {
 
   return (
     <div className="app scanlines" style={{ position: "relative" }}>
-      <TopBar step={6} onBack={() => router.push("/extras")} billName={restaurantName} />
+      <TopBar step={6} onBack={() => router.push("/extras")} billName={restaurantName} receiptDate={receiptDate} />
 
       <div className="summary-scroll">
         <div style={{ padding: "12px 6px 8px" }}>

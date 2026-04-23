@@ -41,7 +41,6 @@ export interface LineItem {
 
 export type DiscountType = "flat" | "percent";
 export type DiscountTiming = "before_tax" | "after_tax";
-export type RoundingUnit = "none" | "005" | "010";
 
 export interface BillExtras {
   serviceChargePct: number;
@@ -67,6 +66,7 @@ export interface PersonSplit {
 
 export interface SplitSession {
   restaurantName: string | null;
+  receiptDate: string | null;
   date: string;
   rawImage: string | null;
   participants: Participant[];

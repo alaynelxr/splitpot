@@ -13,11 +13,12 @@ export default function ExtrasPage() {
   const lineItems = useSplitStore((s) => s.lineItems);
   const participants = useSplitStore((s) => s.participants);
   const restaurantName = useSplitStore((s) => s.restaurantName);
+  const receiptDate = useSplitStore((s) => s.receiptDate);
   const setExtras = useSplitStore((s) => s.setExtras);
   const computeSplits = useSplitStore((s) => s.computeSplits);
 
-  const [svcPct, setSvcPct] = useState("10");
-  const [gstPct, setGstPct] = useState("9");
+  const [svcPct, setSvcPct] = useState(() => extras.serviceChargePct > 0 ? String(extras.serviceChargePct) : "0");
+  const [gstPct, setGstPct] = useState(() => extras.gstPct > 0 ? String(extras.gstPct) : "0");
   const [discountVal, setDiscountVal] = useState(String(extras.discountValue || ""));
   const [discountType, setDiscountType] = useState<DiscountType>(extras.discountType);
   const [discountTiming, setDiscountTiming] = useState<DiscountTiming>(extras.discountTiming);
@@ -54,7 +55,7 @@ export default function ExtrasPage() {
 
   return (
     <div className="app scanlines" style={{ position: "relative" }}>
-      <TopBar step={5} onBack={() => router.push("/items")} billName={restaurantName} />
+      <TopBar step={5} onBack={() => router.push("/items")} billName={restaurantName} receiptDate={receiptDate} />
 
       <div className="extras">
         {/* Live totals preview */}
