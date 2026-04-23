@@ -148,6 +148,9 @@ export async function runOcr(
   try {
     if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
 
+    // PSM 4: single column of variable-size text — suits the vertical layout of receipts.
+    await worker.setParameters({ tessedit_pageseg_mode: "4" });
+
     console.log("[OCR] Calling worker.recognize...");
     const { data } = await worker.recognize(imageFile);
     console.log("[OCR] recognize() completed, raw text length:", data.text.length);
