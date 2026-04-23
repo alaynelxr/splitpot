@@ -228,7 +228,8 @@ export function parseReceiptText(rawText: string): OcrResult {
   }
 
   // Parse line items
-  for (const line of lines) {
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
     // Match price at end of line. Try patterns in order of reliability:
     //   1. Explicit decimal:    "12.99" or "12,99"
     //   2. 3-4 digit integer:   "2099" → $20.99, "770" → $7.70 (period dropped by OCR)
@@ -291,13 +292,30 @@ export function parseReceiptText(rawText: string): OcrResult {
       continue;
     }
 
-    console.log(`[OCR] LINE ITEM: name="${cleanName}" price=${priceCents}¢ (from "${line}")`);
-    lineItems.push({
-      id: genId(),
-      name: cleanName || "Item",
-      priceCents,
-      assignedTo: [],
-    });
+    const item: LineItem = { id: genId(), name: cleanName, priceCents, assignedTo: [] };
+    console.log(`[OCR] LINE ITEM: name="${item.name}" price=${priceCents}¢ (from "${line}")`);
+
+    // Lookahead: if this line's name is garbage (garbled Chinese OCR), check whether
+    // the immediately following line is a clean English continuation with no price.
+    // Applies to bilingual receipts where Chinese+price share a line, English name is below.
+    if (isGarbageName(item.name) && i + 1 < lines.length) {
+      const nextLine = lines[i + 1];
+      if (
+        !matchPrice(nextLine) &&
+        /[a-zA-Z]{3,}/.test(nextLine) &&
+        !SKIP_KEYWORDS.some((re) => re.test(nextLine)) &&
+        !LINE_SKIP_PATTERNS.some((re) => re.test(nextLine))
+      ) {
+        const promoted = nextLine.replace(/[^\w\s'&\-()]/g, " ").replace(/\s+/g, " ").trim();
+        if (promoted.length > 3) {
+          console.log(`[OCR] LOOKAHEAD: "${item.name}" → "${promoted}" (from "${nextLine}")`);
+          item.name = promoted;
+          i++; // consume the continuation line so it is not re-processed
+        }
+      }
+    }
+
+    lineItems.push(item);
   }
 
   // Back-calculate percentages from raw charge amounts when no explicit % was on the receipt.
@@ -325,6 +343,17 @@ export function parseReceiptText(rawText: string): OcrResult {
     gstPct,
     rawText,
   };
+}
+
+/**
+ * Returns true when a name looks like garbled Chinese OCR output rather than real English.
+ * Heuristic: after stripping a leading quantity token, every remaining word is ≤ 3 characters.
+ * e.g. "o EER", "1 EBs", "2 Rm" → true   "Free Flow Condiment" → false
+ */
+function isGarbageName(name: string): boolean {
+  const withoutQty = name.replace(/^\d{1,2}\s+/, "").trim();
+  if (!withoutQty) return true;
+  return withoutQty.split(/\s+/).every((w) => w.length <= 3);
 }
 
 const MONTHS_SHORT = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
